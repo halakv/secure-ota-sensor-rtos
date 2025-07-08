@@ -22,6 +22,23 @@
 #include "task.h"
 #include "main.h"
 
+#include "app_tasks.h"
+
+/* Create the thread(s) */
+void MX_FREERTOS_Init(void) {
+  /* creation of SensorTask */
+  SensorTaskHandle = osThreadNew(SensorTaskFunc, NULL, &SensorTask_attributes);
+
+  /* creation of LoggerTask */
+  LoggerTaskHandle = osThreadNew(LoggerTaskFunc, NULL, &LoggerTask_attributes);
+
+  /* creation of OTATask */
+  OTATaskHandle = osThreadNew(OTATaskFunc, NULL, &OTATask_attributes);
+
+  /* creation of HeartbeatTask */
+  HeartbeatTaskHandle = osThreadNew(HeartbeatTaskFunc, NULL, &HeartbeatTask_attributes);
+}
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 

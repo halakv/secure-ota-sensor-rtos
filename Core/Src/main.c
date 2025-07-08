@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "FreeRTOS.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -43,27 +44,6 @@
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart2;
 
-/* Definitions for SensorTask */
-osThreadId_t SensorTaskHandle;
-const osThreadAttr_t SensorTask_attributes = {
-  .name = "SensorTask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-/* Definitions for LoggerTask */
-osThreadId_t LoggerTaskHandle;
-const osThreadAttr_t LoggerTask_attributes = {
-  .name = "LoggerTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityLow1,
-};
-/* Definitions for OTATask */
-osThreadId_t OTATaskHandle;
-const osThreadAttr_t OTATask_attributes = {
-  .name = "OTATask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
-};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -72,9 +52,7 @@ const osThreadAttr_t OTATask_attributes = {
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
-void sensor_data(void *argument);
-void logging(void *argument);
-void ota(void *argument);
+
 
 /* USER CODE BEGIN PFP */
 
@@ -103,6 +81,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -116,6 +95,9 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+  uart_logger_init(&huart2);
+
+  log_printf("UART debug console initialized!\r\n");
 
   /* USER CODE END 2 */
 
@@ -123,6 +105,7 @@ int main(void)
   osKernelInitialize();
 
   /* USER CODE BEGIN RTOS_MUTEX */
+  MX_FREERTOS_Init();
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
@@ -138,15 +121,6 @@ int main(void)
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
-  /* Create the thread(s) */
-  /* creation of SensorTask */
-  SensorTaskHandle = osThreadNew(sensor_data, NULL, &SensorTask_attributes);
-
-  /* creation of LoggerTask */
-  LoggerTaskHandle = osThreadNew(logging, NULL, &LoggerTask_attributes);
-
-  /* creation of OTATask */
-  OTATaskHandle = osThreadNew(ota, NULL, &OTATask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -286,59 +260,6 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_sensor_data */
-/**
-  * @brief  Function implementing the SensorTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_sensor_data */
-void sensor_data(void *argument)
-{
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END 5 */
-}
-
-/* USER CODE BEGIN Header_logging */
-/**
-* @brief Function implementing the LoggerTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_logging */
-void logging(void *argument)
-{
-  /* USER CODE BEGIN logging */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END logging */
-}
-
-/* USER CODE BEGIN Header_ota */
-/**
-* @brief Function implementing the OTATask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_ota */
-void ota(void *argument)
-{
-  /* USER CODE BEGIN ota */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END ota */
-}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
