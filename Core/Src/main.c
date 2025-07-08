@@ -19,7 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "FreeRTOS.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -44,6 +43,13 @@
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart2;
 
+/* Definitions for HeartbeatTask */
+osThreadId_t HeartbeatTaskHandle;
+const osThreadAttr_t HeartbeatTask_attributes = {
+  .name = "HeartbeatTask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityHigh,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -52,7 +58,7 @@ UART_HandleTypeDef huart2;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
-
+void HeartbeatTaskFunc(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -94,7 +100,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+
   /* USER CODE BEGIN 2 */
+  queue_init();
   uart_logger_init(&huart2);
 
   log_printf("UART debug console initialized!\r\n");
@@ -105,7 +113,6 @@ int main(void)
   osKernelInitialize();
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  MX_FREERTOS_Init();
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
@@ -121,8 +128,12 @@ int main(void)
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
+  /* Create the thread(s) */
+  /* creation of HeartbeatTask */
+  HeartbeatTaskHandle = osThreadNew(HeartbeatTaskFunc, NULL, &HeartbeatTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  App_CreateTasks();
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
@@ -260,6 +271,24 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
+/* USER CODE BEGIN Header_HeartbeatTaskFunc */
+/**
+* @brief Function implementing the HeartbeatTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_HeartbeatTaskFunc */
+void HeartbeatTaskFunc(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+	  osDelay(500);
+  }
+  /* USER CODE END 5 */
+}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
