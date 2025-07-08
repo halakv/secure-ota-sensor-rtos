@@ -1,0 +1,20 @@
+# STM32CubeIDE
+*.launch
+*.log
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.srec
+/build/
+/Debug/
+/Release/
+.settings/
+.project
+.cproject
+*.ioc-backup
+*.zip
+
