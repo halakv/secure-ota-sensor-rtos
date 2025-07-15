@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "cmsis_os.h"
+#include "cmsis_os2.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -41,6 +41,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim11;
+
 UART_HandleTypeDef huart2;
 
 /* Definitions for HeartbeatTask */
@@ -50,6 +52,34 @@ const osThreadAttr_t HeartbeatTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
+osThreadId_t CLITaskHandle;
+const osThreadAttr_t CLITask_attributes = {
+  .name = "CLITask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
+osThreadId_t SensorTaskHandle;
+const osThreadAttr_t SensorTask_attributes = {
+  .name = "SensorTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal2,
+};
+
+osThreadId_t LoggerTaskHandle;
+const osThreadAttr_t LoggerTask_attributes = {
+  .name = "LoggerTask",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal4,
+};
+
+osThreadId_t OTATaskHandle;
+const osThreadAttr_t OTATask_attributes = {
+  .name = "OTATask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -58,7 +88,8 @@ const osThreadAttr_t HeartbeatTask_attributes = {
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
-void HeartbeatTaskFunc(void *argument);
+static void MX_TIM11_Init(void);
+
 
 /* USER CODE BEGIN PFP */
 
@@ -100,9 +131,8 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-
+  MX_TIM11_Init();
   /* USER CODE BEGIN 2 */
-  queue_init();
   uart_logger_init(&huart2);
 
   log_printf("UART debug console initialized!\r\n");
@@ -114,6 +144,8 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
+  CreateMutex();
+  CreateQueue();
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -133,7 +165,10 @@ int main(void)
   HeartbeatTaskHandle = osThreadNew(HeartbeatTaskFunc, NULL, &HeartbeatTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  App_CreateTasks();
+  CLITaskHandle = osThreadNew(CLITaskFunc, NULL, &CLITask_attributes);
+  SensorTaskHandle = osThreadNew(SensorTaskFunc, NULL, &SensorTask_attributes);
+  LoggerTaskHandle = osThreadNew(LoggerTaskFunc, NULL, &LoggerTask_attributes);
+  OTATaskHandle = osThreadNew(OTATaskFunc, NULL, &OTATask_attributes);
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
@@ -196,6 +231,37 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM11 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM11_Init(void)
+{
+
+  /* USER CODE BEGIN TIM11_Init 0 */
+
+  /* USER CODE END TIM11_Init 0 */
+
+  /* USER CODE BEGIN TIM11_Init 1 */
+
+  /* USER CODE END TIM11_Init 1 */
+  htim11.Instance = TIM11;
+  htim11.Init.Prescaler = 0;
+  htim11.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim11.Init.Period = 65535;
+  htim11.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim11.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim11) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM11_Init 2 */
+
+  /* USER CODE END TIM11_Init 2 */
+
 }
 
 /**
@@ -278,17 +344,7 @@ static void MX_GPIO_Init(void)
 * @retval None
 */
 /* USER CODE END Header_HeartbeatTaskFunc */
-void HeartbeatTaskFunc(void *argument)
-{
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-	  osDelay(500);
-  }
-  /* USER CODE END 5 */
-}
+
 
 /**
   * @brief  Period elapsed callback in non blocking mode

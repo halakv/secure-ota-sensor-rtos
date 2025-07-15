@@ -4,82 +4,103 @@
 #include "uart_logger.h"
 #include "main.h"
 
-#define QUEUE_SIZE		16
+#define QUEUE_SIZE		10
 
-typedef struct{
-	int32_t temperature;
-	uint32_t pressure;
-	uint8_t crc;
-}SensorMessage_t;
+extern UART_HandleTypeDef huart2;
+uint8_t rx_char;
+char command_buff[64];
+int i = 0;
 
-osThreadId_t SensorTaskHandle;
-const osThreadAttr_t SensorTask_attributes = {
-  .name = "SensorTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+SensorMessage_t g_sensor_data = {0};
+
+//Mutex creating and init
+
+const osMutexAttr_t sensor_data_mutex_attr = {
+    .name = "SensorDataMutex"
 };
 
-osThreadId_t LoggerTaskHandle;
-const osThreadAttr_t LoggerTask_attributes = {
-  .name = "LoggerTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityLow1,
-};
+osMutexId_t sensor_data_mutex = NULL;
 
-osThreadId_t OTATaskHandle;
-const osThreadAttr_t OTATask_attributes = {
-  .name = "OTATask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
-};
+void CreateMutex(){
+	sensor_data_mutex = osMutexNew(&sensor_data_mutex_attr);
+	if (sensor_data_mutex == NULL) {
+	    log_printf("Failed to create SensorDataMutex\r\n");
+	}
 
-osMessageQueueId_t sensorQueue;
-
-void App_CreateTasks(void) {
-  SensorTaskHandle = osThreadNew(SensorTaskFunc, NULL, &SensorTask_attributes);
-  LoggerTaskHandle = osThreadNew(LoggerTaskFunc, NULL, &LoggerTask_attributes);
-  OTATaskHandle = osThreadNew(OTATaskFunc, NULL, &OTATask_attributes);
 }
 
-
+osMessageQueueId_t loggerQueue;
 /* creation of DataQueue */
-void queue_init(void) {
-	sensorQueue = osMessageQueueNew (QUEUE_SIZE, sizeof(SensorMessage_t), NULL);
-    if (sensorQueue == NULL) {
-        // Handle error
+void CreateQueue(void) {
+	loggerQueue = osMessageQueueNew (QUEUE_SIZE, 100, NULL);
+    if (loggerQueue == NULL) {
+    	log_printf("Queue creation failed\r\n");
     }
 }
 
+void HeartbeatTaskFunc(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+	log_printf("[HeartBeat] task alive\r\n");
+  for(;;)
+  {
+	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+	  osDelay(500);
+  }
+  osDelay(1000);
+}
 
+void CLITaskFunc(void *argument) {
+	log_printf("[CLI] task alive\r\n");
+	for(;;){
+		if(HAL_UART_Receive(&huart2, &rx_char, 1, HAL_MAX_DELAY) == HAL_OK){
+			if(rx_char == '\r' || rx_char == '\n'){
+				command_buff[i] = '\0';
+				handle_command(command_buff);
+				i = 0;
+			}else if(i < sizeof(command_buff) - 1){
+				command_buff[i++] = rx_char;
+			}
+		}
+	}
+	osDelay(5000);
+}
 
 void SensorTaskFunc(void *argument) {
+	log_printf("[Sensor] task alive\r\n");
   for (;;) {
-	SensorMessage_t sdata;
-	sdata.temperature = 25;
-	sdata.pressure = 10;
-	sdata.crc = 0x9F;
-	osStatus_t status = osMessageQueuePut(sensorQueue, &sdata, 0, 1000);
-	if(status != osOK){
-		//handle error
-	}
-    osDelay(2000);
+
+	  float temp = 25;
+	  float press = 10;
+
+//	  if(osMutexAcquire(sensor_data_mutex, osWaitForever) == osOK){
+		  g_sensor_data.temperature = temp;
+		  g_sensor_data.pressure = press;
+		  g_sensor_data.timestamp_ms = HAL_GetTick();
+//		  osMutexRelease(sensor_data_mutex);
+//	  }
+
   }
+  osDelay(5000);
 }
 
 void LoggerTaskFunc(void *argument) {
+	log_printf("[Logger] task alive\r\n");
     for (;;) {
-    	SensorMessage_t receiveMsg;
-    	osStatus_t status = osMessageQueueGet(sensorQueue, &receiveMsg, 0, 1000);
-    	if(status == osOK){
-    		log_printf("Sensor Data is %d %d \n", receiveMsg.temperature, receiveMsg.pressure);
+    	char msg[100];
+//    	log_printf("Message from logger...\r\n");
+    	if(osMessageQueueGet(loggerQueue, &msg, 0, osWaitForever) == osOK){
+    		log_printf("%s \r\n",msg);
     	}
-        osDelay(1000);
     }
+    osDelay(2000);
 }
 
 void OTATaskFunc(void *argument) {
   for (;;) {
     log_printf("[OTA] Waiting for update...\r\n");
-    osDelay(5000);
+
   }
+  osDelay(5000);
 }
