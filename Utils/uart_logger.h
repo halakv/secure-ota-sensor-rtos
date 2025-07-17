@@ -1,7 +1,6 @@
 #ifndef UART_LOGGER_H
 #define UART_LOGGER_H
 
-#include "cmsis_os2.h"
 #include "main.h"
 #include <stdio.h>
 

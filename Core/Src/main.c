@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "cmsis_os2.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -41,8 +41,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim11;
-
 UART_HandleTypeDef huart2;
 
 /* Definitions for HeartbeatTask */
@@ -52,34 +50,39 @@ const osThreadAttr_t HeartbeatTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
+/* Definitions for CLITask */
 osThreadId_t CLITaskHandle;
 const osThreadAttr_t CLITask_attributes = {
   .name = "CLITask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
-osThreadId_t SensorTaskHandle;
-const osThreadAttr_t SensorTask_attributes = {
-  .name = "SensorTask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal2,
-};
-
-osThreadId_t LoggerTaskHandle;
-const osThreadAttr_t LoggerTask_attributes = {
-  .name = "LoggerTask",
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal4,
 };
-
+/* Definitions for SensorTask */
+osThreadId_t SensorTaskHandle;
+const osThreadAttr_t SensorTask_attributes = {
+  .name = "SensorTask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal2,
+};
+/* Definitions for OTATask */
 osThreadId_t OTATaskHandle;
 const osThreadAttr_t OTATask_attributes = {
   .name = "OTATask",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-
+/* Definitions for LoggerTask */
+osThreadId_t LoggerTaskHandle;
+const osThreadAttr_t LoggerTask_attributes = {
+  .name = "LoggerTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal3,
+};
+/* Definitions for cliRxQueue */
+osMessageQueueId_t cliRxQueueHandle;
+const osMessageQueueAttr_t cliRxQueue_attributes = {
+  .name = "cliRxQueue"
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -88,8 +91,11 @@ const osThreadAttr_t OTATask_attributes = {
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_TIM11_Init(void);
-
+void HeartbeatTaskFunc(void *argument);
+void CLITaskFunc(void *argument);
+void SensorTaskFunc(void *argument);
+void OTATaskFunc(void *argument);
+void LoggerTaskFunc(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -97,7 +103,7 @@ static void MX_TIM11_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+uint8_t rx_byte;
 /* USER CODE END 0 */
 
 /**
@@ -131,11 +137,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  MX_TIM11_Init();
   /* USER CODE BEGIN 2 */
+  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   uart_logger_init(&huart2);
-
-  log_printf("UART debug console initialized!\r\n");
 
   /* USER CODE END 2 */
 
@@ -156,6 +160,10 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
+  /* Create the queue(s) */
+  /* creation of cliRxQueue */
+  cliRxQueueHandle = osMessageQueueNew (100, sizeof(char), &cliRxQueue_attributes);
+
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
@@ -164,11 +172,19 @@ int main(void)
   /* creation of HeartbeatTask */
   HeartbeatTaskHandle = osThreadNew(HeartbeatTaskFunc, NULL, &HeartbeatTask_attributes);
 
-  /* USER CODE BEGIN RTOS_THREADS */
+  /* creation of CLITask */
   CLITaskHandle = osThreadNew(CLITaskFunc, NULL, &CLITask_attributes);
+
+  /* creation of SensorTask */
   SensorTaskHandle = osThreadNew(SensorTaskFunc, NULL, &SensorTask_attributes);
-  LoggerTaskHandle = osThreadNew(LoggerTaskFunc, NULL, &LoggerTask_attributes);
+
+  /* creation of OTATask */
   OTATaskHandle = osThreadNew(OTATaskFunc, NULL, &OTATask_attributes);
+
+  /* creation of LoggerTask */
+  LoggerTaskHandle = osThreadNew(LoggerTaskFunc, NULL, &LoggerTask_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
@@ -231,37 +247,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-}
-
-/**
-  * @brief TIM11 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM11_Init(void)
-{
-
-  /* USER CODE BEGIN TIM11_Init 0 */
-
-  /* USER CODE END TIM11_Init 0 */
-
-  /* USER CODE BEGIN TIM11_Init 1 */
-
-  /* USER CODE END TIM11_Init 1 */
-  htim11.Instance = TIM11;
-  htim11.Init.Prescaler = 0;
-  htim11.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim11.Init.Period = 65535;
-  htim11.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim11.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim11) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM11_Init 2 */
-
-  /* USER CODE END TIM11_Init 2 */
-
 }
 
 /**
@@ -334,16 +319,23 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART2) {
+
+    	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    	// Example: Send received byte to CLI task via queue
+    	osMessageQueuePut(cliRxQueueHandle, &rx_byte,0, 0);
+
+    	// Restart interrupt for next byte
+    	HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+
+    	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+}
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_HeartbeatTaskFunc */
-/**
-* @brief Function implementing the HeartbeatTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_HeartbeatTaskFunc */
 
 
 /**

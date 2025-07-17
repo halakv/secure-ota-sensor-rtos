@@ -7,7 +7,7 @@
 #define QUEUE_SIZE		10
 
 extern UART_HandleTypeDef huart2;
-uint8_t rx_char;
+
 char command_buff[64];
 int i = 0;
 
@@ -51,16 +51,18 @@ void HeartbeatTaskFunc(void *argument)
   osDelay(1000);
 }
 
+
 void CLITaskFunc(void *argument) {
-	log_printf("[CLI] task alive\r\n");
+	uint8_t bytes;
+
 	for(;;){
-		if(HAL_UART_Receive(&huart2, &rx_char, 1, HAL_MAX_DELAY) == HAL_OK){
-			if(rx_char == '\r' || rx_char == '\n'){
+		if (osMessageQueueGet(cliRxQueueHandle, &bytes, NULL, osWaitForever) == osOK){
+			if(bytes == '\r' || bytes == '\n'){
 				command_buff[i] = '\0';
 				handle_command(command_buff);
 				i = 0;
 			}else if(i < sizeof(command_buff) - 1){
-				command_buff[i++] = rx_char;
+				command_buff[i++] = bytes;
 			}
 		}
 	}
@@ -68,28 +70,27 @@ void CLITaskFunc(void *argument) {
 }
 
 void SensorTaskFunc(void *argument) {
-	log_printf("[Sensor] task alive\r\n");
+
   for (;;) {
 
 	  float temp = 25;
 	  float press = 10;
 
-//	  if(osMutexAcquire(sensor_data_mutex, osWaitForever) == osOK){
+	  if(osMutexAcquire(sensor_data_mutex, osWaitForever) == osOK){
 		  g_sensor_data.temperature = temp;
 		  g_sensor_data.pressure = press;
 		  g_sensor_data.timestamp_ms = HAL_GetTick();
-//		  osMutexRelease(sensor_data_mutex);
-//	  }
+		  osMutexRelease(sensor_data_mutex);
+	  }
 
   }
   osDelay(5000);
 }
 
 void LoggerTaskFunc(void *argument) {
-	log_printf("[Logger] task alive\r\n");
+
     for (;;) {
     	char msg[100];
-//    	log_printf("Message from logger...\r\n");
     	if(osMessageQueueGet(loggerQueue, &msg, 0, osWaitForever) == osOK){
     		log_printf("%s \r\n",msg);
     	}

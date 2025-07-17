@@ -1,6 +1,7 @@
 #ifndef __APP_TASKS_H
 #define __APP_TASKS_H
 
+
 #include "cmsis_os2.h"
 
 typedef struct{
@@ -20,6 +21,7 @@ void HeartbeatTaskFunc(void *argument);
 void QueueCreate(void);
 
 extern osMessageQueueId_t loggerQueue;
+extern osMessageQueueId_t cliRxQueueHandle;
 
 // Mutex for thread-safe access
 extern osMutexId_t sensor_data_mutex;

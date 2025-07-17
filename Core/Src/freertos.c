@@ -21,7 +21,6 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
-#include "app_tasks.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -52,25 +51,6 @@
 /* USER CODE BEGIN FunctionPrototypes */
 
 /* USER CODE END FunctionPrototypes */
-
-/* Hook prototypes */
-void configureTimerForRunTimeStats(void);
-unsigned long getRunTimeCounterValue(void);
-
-/* USER CODE BEGIN 1 */
-extern TIM_HandleTypeDef htim11;
-/* Functions needed when configGENERATE_RUN_TIME_STATS is on */
-__weak void configureTimerForRunTimeStats(void)
-{
-	HAL_TIM_Base_Start_IT(&htim11);
-}
-
-volatile unsigned long ulHighFrequencyTimerTicks;
-__weak unsigned long getRunTimeCounterValue(void)
-{
-	return ulHighFrequencyTimerTicks;
-}
-/* USER CODE END 1 */
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
