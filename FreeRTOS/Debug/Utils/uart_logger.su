@@ -1,0 +1,2 @@
+../Utils/uart_logger.c:11:6:uart_logger_init	16	static
+../Utils/uart_logger.c:19:6:log_printf	144	static

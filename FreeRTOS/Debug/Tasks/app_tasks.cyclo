@@ -1,0 +1,7 @@
+../Tasks/app_tasks.c:24:6:CreateMutex	2
+../Tasks/app_tasks.c:34:6:CreateQueue	2
+../Tasks/app_tasks.c:41:6:HeartbeatTaskFunc	1
+../Tasks/app_tasks.c:55:6:CLITaskFunc	5
+../Tasks/app_tasks.c:72:6:SensorTaskFunc	2
+../Tasks/app_tasks.c:90:6:LoggerTaskFunc	2
+../Tasks/app_tasks.c:101:6:OTATaskFunc	1

@@ -1,0 +1,7 @@
+../Tasks/app_tasks.c:24:6:CreateMutex	8	static
+../Tasks/app_tasks.c:34:6:CreateQueue	8	static
+../Tasks/app_tasks.c:41:6:HeartbeatTaskFunc	16	static
+../Tasks/app_tasks.c:55:6:CLITaskFunc	24	static
+../Tasks/app_tasks.c:72:6:SensorTaskFunc	24	static
+../Tasks/app_tasks.c:90:6:LoggerTaskFunc	120	static
+../Tasks/app_tasks.c:101:6:OTATaskFunc	16	static

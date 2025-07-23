@@ -1,0 +1,6 @@
+../Core/Src/main.c:81:6:log	8	static
+../Core/Src/main.c:185:6:SystemClock_Config	88	static,ignoring_inline_asm
+../Core/Src/main.c:298:6:jump_to_application	16	static,ignoring_inline_asm
+../Core/Src/main.c:100:5:main	48	static,ignoring_inline_asm
+../Core/Src/main.c:313:9:validate_crc	0	static
+../Core/Src/main.c:325:6:Error_Handler	0	static,ignoring_inline_asm

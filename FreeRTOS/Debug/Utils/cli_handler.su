@@ -1,0 +1,2 @@
+../Utils/cli_handler.c:18:6:log_enqueue_fmt	120	static
+../Utils/cli_handler.c:33:6:handle_command	56	static
