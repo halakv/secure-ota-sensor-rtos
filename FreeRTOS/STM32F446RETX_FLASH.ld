@@ -46,9 +46,8 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 MEMORY
 {
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
-  FLASH    (rx)    : ORIGIN = 0x8008000,   LENGTH = 220K
-  SLOTB (rx)     : ORIGIN = 0x0803F000, LENGTH = 220K   /* Slot B (reserved) */
-  METADATA (rx)  : ORIGIN = 0x08007800, LENGTH = 2K     /* Metadata region */
+  FLASH    (rx)    : ORIGIN = 0x8010000,   LENGTH = 192K
+  SLOTB (rx)     : ORIGIN = 0x08040000, LENGTH = 256K   /* Slot B (reserved) */
 }
 
 /* Sections */

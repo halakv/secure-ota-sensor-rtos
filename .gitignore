@@ -9,9 +9,12 @@
 *.map
 *.list
 *.srec
-/build/
-/Debug/
-/Release/
+FreeRTOS_bootloader/build/
+FreeRTOS/build/
+FreeRTOS_bootloader/Debug/
+FreeRTOS/Debug/
+FreeRTOS_bootloader/Release/
+FreeRTOS/Release/
 .settings/
 .project
 .cproject

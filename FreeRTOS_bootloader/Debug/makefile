@@ -64,8 +64,8 @@ all: main-build
 main-build: FreeRTOS_bootloader.elf secondary-outputs
 
 # Tool invocations
-FreeRTOS_bootloader.elf FreeRTOS_bootloader.map: $(OBJS) $(USER_OBJS) C:\Users\Halak\ Vyas\STM32CubeIDE\workspace_1.16.0\FreeRTOS_bootloader\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "FreeRTOS_bootloader.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\Halak Vyas\STM32CubeIDE\workspace_1.16.0\FreeRTOS_bootloader\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="FreeRTOS_bootloader.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+FreeRTOS_bootloader.elf FreeRTOS_bootloader.map: $(OBJS) $(USER_OBJS) C:\Users\Halak\ Vyas\STM32CubeIDE\workspace_1.16.0\Secure_OTA_RTOS\FreeRTOS_bootloader\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "FreeRTOS_bootloader.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\Halak Vyas\STM32CubeIDE\workspace_1.16.0\Secure_OTA_RTOS\FreeRTOS_bootloader\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="FreeRTOS_bootloader.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
