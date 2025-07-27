@@ -1,9 +1,0 @@
-../Core/Src/main.c:56:8:user_i2c_read	40	static
-../Core/Src/main.c:70:8:user_i2c_write	32	dynamic
-../Core/Src/main.c:87:6:user_delay_ms	0	static
-../Core/Src/main.c:154:6:Sensor_Task	32	static
-../Core/Src/main.c:183:6:Uart_Print_Task	104	static
-../Core/Src/main.c:208:6:SystemClock_Config	88	static,ignoring_inline_asm
-../Core/Src/main.c:97:5:main	80	static,ignoring_inline_asm
-../Core/Src/main.c:330:6:HAL_TIM_PeriodElapsedCallback	0	static
-../Core/Src/main.c:347:6:Error_Handler	0	static,ignoring_inline_asm
