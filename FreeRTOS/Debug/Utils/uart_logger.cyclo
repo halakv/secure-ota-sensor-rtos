@@ -1,2 +1,0 @@
-../Utils/uart_logger.c:11:6:uart_logger_init	1
-../Utils/uart_logger.c:19:6:log_printf	2
