@@ -37,6 +37,9 @@ void handle_command(const char *cmd){
 	else if(strcmp(cmd, "reboot") == 0){
 		log_enqueue_fmt("Rebooting...\r\n");
 	}
+	else if(strcmp(cmd, "ota") == 0){
+		ota_write();
+	}
 	else if(strcmp(cmd, "data") == 0){
 		SensorMessage_t snapshot;
 

@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -32,27 +31,26 @@ typedef void (*pFunction)(void);
 typedef enum {
     SLOT_A = 0,
     SLOT_B = 1
-} slot_t;
+} app_slot_t;
 
 typedef struct {
-    uint32_t version;
+	uint32_t is_valid;    // 0xA5A5A5A5 if metadata is valid
+	uint32_t version;
     uint32_t active_slot; // SLOT_A or SLOT_B
     uint32_t crc;
-    uint32_t is_valid;    // 0xA5A5A5A5 if metadata is valid
 } BootMetadata_t;
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+extern uint32_t _estack;  // Defined in linker script
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define DFU_BOOT_FLAG 0xDEADBEEF
-#define SLOT_A_ADDR   0x08008000
-#define SLOT_B_ADDR   0x0803F000
+#define SLOT_A_ADDR   0x08010000
+#define SLOT_B_ADDR   0x08040000
 #define METADATA_ADDR 0x08007800
 /* USER CODE END PM */
 
@@ -61,9 +59,7 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 extern int _bflag;
-uint32_t *dfu_boot_flag;
-pFunction JumpToApplication;
-uint32_t JumpAddress;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -85,9 +81,9 @@ void log(const char *msg) {
 //populating metadata for testing
 __attribute__((section(".boot_metadata")))
 const BootMetadata_t boot_flags = {
-    .version = 11,
+	.is_valid = 0xA5A5A5A5,
+	.version = 0x00010001,
 	.active_slot = SLOT_A,
-    .is_valid = 0xA5A5A5A5,
     .crc = 0xFFFFFFFF,
 };
 
@@ -101,26 +97,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-//	 // We handle all this before the HAL Libraries have been initialized.
-//	dfu_boot_flag = (uint32_t*) (&_bflag); // set in linker script
-//
-//	if (*dfu_boot_flag != DFU_BOOT_FLAG)
-//	{
-//
-//		/* Test if user code is programmed starting from address 0x08008000 */
-//		if (((*(__IO uint32_t*) USBD_DFU_APP_DEFAULT_ADD) & 0x2FFC0000) == 0x20000000)
-//		{
-//			/* Jump to user application */
-//			JumpAddress = *(__IO uint32_t*) (USBD_DFU_APP_DEFAULT_ADD + 4);
-//			JumpToApplication = (pFunction) JumpAddress;
-//
-//			/* Initialize user application's Stack Pointer */
-//			__set_MSP(*(__IO uint32_t*) USBD_DFU_APP_DEFAULT_ADD);
-//			JumpToApplication();
-//		}
-//	}
-//
-//	*dfu_boot_flag = 0; // So next boot won't be affected
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -142,7 +119,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
-  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   log("Bootloader started...\r\n");
 
@@ -300,13 +276,35 @@ void jump_to_application(uint32_t app_address)
     uint32_t sp = *(volatile uint32_t *)app_address;
     uint32_t reset_handler = *(volatile uint32_t *)(app_address + 4);
 
-    log("Deinitializing peripherals...\r\n");
+    // Validate the stack pointer (should be in RAM range)
+    if ((sp < 0x20000000) || (sp >= (0x20000000 + 128 * 1024))) {
+    	log("Invalid stack pointer! Using bootloader stack.\r\n");
+        sp = _estack;  // Use bootloader's stack if app stack is invalid
+    }
+
     HAL_UART_DeInit(&huart2);
     HAL_DeInit();
 
     __disable_irq();
+    __DSB();
+
+    // Clear pending interrupts
+    for (int i = 0; i < 8; i++) {
+    	NVIC->ICER[i] = 0xFFFFFFFF;
+        NVIC->ICPR[i] = 0xFFFFFFFF;
+    }
+
+    // ✅ Set Vector Table Offset
+    SCB->VTOR = app_address;
+
     __set_MSP(sp);
     pFunction app_entry = (pFunction)reset_handler;
+
+    if ((reset_handler & 0xFFF00000) != 0x08000000) {
+    	log("Invalid reset handler address!\r\n");
+        Error_Handler();
+    }
+
     app_entry();
 }
 

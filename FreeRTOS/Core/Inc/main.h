@@ -32,6 +32,7 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
+#include "uart_logger.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/

@@ -1,7 +1,6 @@
 #ifndef __APP_TASKS_H
 #define __APP_TASKS_H
 
-
 #include "cmsis_os2.h"
 
 typedef struct{

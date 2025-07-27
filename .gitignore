@@ -1,23 +1,30 @@
-# STM32CubeIDE
-*.launch
-*.log
+# Build directories
+[Bb]uild/
+[Dd]ebug/
+[Rr]elease/
+[Oo]bj/
+[Bb]in/
+
+# Build artifacts
+*.su
 *.o
 *.d
 *.elf
-*.hex
 *.bin
+*.hex
 *.map
 *.list
-*.srec
-FreeRTOS_bootloader/build/
-FreeRTOS/build/
-FreeRTOS_bootloader/Debug/
-FreeRTOS/Debug/
-FreeRTOS_bootloader/Release/
-FreeRTOS/Release/
+*.mk
+*.cache
+*.log
+*.elf.proxy_cache
+
+# IDE specific
 .settings/
-.project
 .cproject
+.project
+*.launch
+
 *.ioc-backup
 *.zip
 

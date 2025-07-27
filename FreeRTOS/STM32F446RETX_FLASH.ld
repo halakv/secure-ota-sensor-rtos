@@ -36,8 +36,7 @@
 ENTRY(Reset_Handler)
 
 /* Highest address of the user mode stack */
-_bflag = ORIGIN(RAM) + LENGTH(RAM) - 4; /* end of "RAM" Ram type memory */
-_estack = _bflag;
+_estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
 
 _Min_Heap_Size = 0x200; /* required amount of heap */
 _Min_Stack_Size = 0x400; /* required amount of stack */
@@ -93,6 +92,11 @@ SECTIONS
     KEEP(*(.slotb_reserved)) /* optional */
     . = ORIGIN(SLOTB) + LENGTH(SLOTB);
   } > SLOTB
+  
+  .metadata 0x08007800:
+  {
+  	KEEP(*(.boot_metadata))
+  } >FLASH
   
   .ARM.extab (READONLY) : /* The "READONLY" keyword is only supported in GCC11 and later, remove it if using GCC10 or earlier. */
   {
