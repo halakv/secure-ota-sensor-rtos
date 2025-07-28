@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "app_tasks.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,14 +48,14 @@ osThreadId_t HeartbeatTaskHandle;
 const osThreadAttr_t HeartbeatTask_attributes = {
   .name = "HeartbeatTask",
   .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for CLITask */
 osThreadId_t CLITaskHandle;
 const osThreadAttr_t CLITask_attributes = {
   .name = "CLITask",
   .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal4,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for SensorTask */
 osThreadId_t SensorTaskHandle;
@@ -68,15 +68,15 @@ const osThreadAttr_t SensorTask_attributes = {
 osThreadId_t OTATaskHandle;
 const osThreadAttr_t OTATask_attributes = {
   .name = "OTATask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityHigh1,
 };
 /* Definitions for LoggerTask */
 osThreadId_t LoggerTaskHandle;
 const osThreadAttr_t LoggerTask_attributes = {
   .name = "LoggerTask",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal3,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for cliRxQueue */
 osMessageQueueId_t cliRxQueueHandle;
@@ -94,7 +94,6 @@ static void MX_USART2_UART_Init(void);
 void HeartbeatTaskFunc(void *argument);
 void CLITaskFunc(void *argument);
 void SensorTaskFunc(void *argument);
-void OTATaskFunc(void *argument);
 void LoggerTaskFunc(void *argument);
 
 /* USER CODE BEGIN PFP */

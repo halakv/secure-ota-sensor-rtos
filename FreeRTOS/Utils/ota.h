@@ -8,7 +8,7 @@
 #ifndef OTA_H_
 #define OTA_H_
 
-static HAL_StatusTypeDef erase_slot(void);
-void ota_write();
+void ota_erase_slot();
+HAL_StatusTypeDef ota_write_firmware(uint32_t offset, uint8_t *data, uint32_t len);
 
 #endif /* OTA_H_ */
