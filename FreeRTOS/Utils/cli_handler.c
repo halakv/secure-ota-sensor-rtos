@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "app_tasks.h"
 
 
@@ -53,44 +54,49 @@ void handle_command(const char *cmd){
 	else if(strcmp(cmd, "reboot") == 0){
 		log_printf("Rebooting...\r\n");
 	}
-	else if(strcmp(cmd, "otastart") == 0){
-		if (otaQueue == NULL) {
-			log_printf("ERROR: otaQueue is NULL!\r\n");
-			return;
-		}
-		
-		OTAMessage_t otaMsg = {0};
-		otaMsg.command = OTA_CMD_START;
-		
-		osStatus_t status = osMessageQueuePut(otaQueue, &otaMsg, 0, 100);
-		
-		if (status != osOK) {
-			log_printf("Failed to send OTA start, error: %d\r\n", status);
+	else if(strncmp(cmd, "otastart ", 9) == 0){
+		// Parse firmware size: "otastart 12345"
+		uint32_t firmware_size = 0;
+		if (sscanf(cmd + 9, "%lu", &firmware_size) == 1 && firmware_size > 0) {
+			if (otaQueue == NULL) {
+				log_printf("ERROR: otaQueue is NULL!\r\n");
+				return;
+			}
+			
+			// Set expected size for OTA transfer
+			ota_expected_size = firmware_size;
+			ota_received_size = 0;
+			
+			OTAMessage_t otaMsg = {0};
+			otaMsg.command = OTA_CMD_START;
+			
+			osStatus_t status = osMessageQueuePut(otaQueue, &otaMsg, 0, 100);
+			
+			if (status != osOK) {
+				log_printf("Failed to send OTA start, error: %d\r\n", status);
+			} else {
+				log_printf("OTA started, expecting %lu bytes\r\n", firmware_size);
+				log_printf("Ready to receive firmware binary data...\r\n");
+				osDelay(10); // Give OTA task time to process
+			}
 		} else {
-			osDelay(10); // Give OTA task time to process
+			log_printf("Usage: otastart <firmware_size_bytes>\r\n");
+			log_printf("Example: otastart 49152\r\n");
 		}
 	}
-	else if(strcmp(cmd, "otadata") == 0){
-		// Send test data: 64 bytes at offset 0
-		OTAMessage_t otaMsg = {0};
-		otaMsg.command = OTA_CMD_DATA;
-		otaMsg.offset = 0;
-		otaMsg.length = 64;
-		
-		// Fill with test pattern
-		for (uint32_t i = 0; i < 64; i++) {
-			otaMsg.data[i] = 0xAA + i;
+	else if(strcmp(cmd, "otastatus") == 0){
+		const char* state_str = "UNKNOWN";
+		switch(ota_state) {
+			case OTA_STATE_IDLE: state_str = "IDLE"; break;
+			case OTA_STATE_RECEIVING: state_str = "RECEIVING"; break;
+			case OTA_STATE_COMPLETE: state_str = "COMPLETE"; break;
 		}
-		
-		osStatus_t status = osMessageQueuePut(otaQueue, &otaMsg, 0, 100);
-		if (status == osOK) {
-			uint32_t count = osMessageQueueGetCount(otaQueue);
-			log_printf("OTA data sent, queue count: %lu\r\n", count);
-			osDelay(10); // Give OTA task time to process
-		} else {
-			log_printf("Failed to send OTA data, error: %d\r\n", status);
+		log_printf("OTA State: %s\r\n", state_str);
+		log_printf("Expected: %lu bytes, Received: %lu bytes\r\n", ota_expected_size, ota_received_size);
+		if (ota_expected_size > 0) {
+			uint32_t progress = (ota_received_size * 100) / ota_expected_size;
+			log_printf("Progress: %lu%%\r\n", progress);
 		}
-		log_printf("otadata command completed\r\n");
 	}
 	else if(strcmp(cmd, "otafinish") == 0){
 		OTAMessage_t otaMsg = {0};
@@ -100,16 +106,6 @@ void handle_command(const char *cmd){
 			log_printf("OTA finish command sent\r\n");
 		} else {
 			log_printf("Failed to send OTA finish command\r\n");
-		}
-	}
-	else if(strcmp(cmd, "queuetest") == 0){
-		log_printf("Testing queue: %p\r\n", (void*)otaQueue);
-		if (otaQueue != NULL) {
-			uint32_t count = osMessageQueueGetCount(otaQueue);
-			uint32_t space = osMessageQueueGetSpace(otaQueue);
-			log_printf("Queue msgs: %lu, space: %lu\r\n", count, space);
-		} else {
-			log_printf("Queue is NULL\r\n");
 		}
 	}
 	else if(strcmp(cmd, "data") == 0){

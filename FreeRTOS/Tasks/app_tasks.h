@@ -19,8 +19,19 @@ typedef struct {
 	OTACommand_t command;
 	uint32_t offset;
 	uint32_t length;
-	uint8_t data[64];
+	uint8_t data[256];  // Increased buffer size for larger chunks
 } OTAMessage_t;
+
+// OTA state management
+typedef enum {
+	OTA_STATE_IDLE,
+	OTA_STATE_RECEIVING,
+	OTA_STATE_COMPLETE
+} OTAState_t;
+
+extern volatile OTAState_t ota_state;
+extern volatile uint32_t ota_expected_size;
+extern volatile uint32_t ota_received_size;
 
 extern SensorMessage_t g_sensor_data;
 
