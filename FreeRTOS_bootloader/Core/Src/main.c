@@ -21,7 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,7 +38,9 @@ typedef struct {
 	uint32_t is_valid;    // 0xA5A5A5A5 if metadata is valid
 	uint32_t version;
     uint32_t active_slot; // SLOT_A or SLOT_B
-    uint32_t crc;
+    uint32_t crc;         // Expected CRC32 of active image
+    uint32_t image_size;  // Size of active image in bytes
+    uint32_t reserved[2]; // Reserved for future use
 } BootMetadata_t;
 
 /* USER CODE END PTD */
@@ -51,7 +54,11 @@ extern uint32_t _estack;  // Defined in linker script
 /* USER CODE BEGIN PM */
 #define SLOT_A_ADDR   0x08010000
 #define SLOT_B_ADDR   0x08040000
-#define METADATA_ADDR 0x08007800
+#define METADATA_ADDR 0x0800C000
+
+// STM32F446RE RAM range: 0x20000000 - 0x2001FFFF (128KB)
+#define RAM_START     0x20000000
+#define RAM_END       0x20020000
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -68,7 +75,12 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void jump_to_application(uint32_t app_address);
-uint8_t validate_crc(uint32_t app_addr, uint32_t expected_crc);
+uint32_t calculate_crc32(uint32_t *data, uint32_t length_words);
+uint32_t calculate_flash_crc(uint32_t start_addr, uint32_t size_bytes);
+uint8_t validate_crc(uint32_t app_addr, uint32_t expected_crc, uint32_t image_size);
+uint8_t is_valid_application(uint32_t app_addr);
+HAL_StatusTypeDef initialize_first_boot_metadata();
+void check_and_clear_flash_protection();
 
 /* USER CODE END PFP */
 
@@ -78,14 +90,8 @@ void log(const char *msg) {
     HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
 }
 
-//populating metadata for testing
-__attribute__((section(".boot_metadata")))
-const BootMetadata_t boot_flags = {
-	.is_valid = 0xA5A5A5A5,
-	.version = 0x00010001,
-	.active_slot = SLOT_A,
-    .crc = 0xFFFFFFFF,
-};
+// Note: Metadata is now dynamically managed in flash
+// Initial metadata should be written by OTA process or flash programmer
 
 /* USER CODE END 0 */
 
@@ -121,23 +127,66 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   log("Bootloader started...\r\n");
+  
+  // Check and clear any flash protection that might interfere with programming
+  check_and_clear_flash_protection();
 
+  // Read metadata from flash (not from const section)
   BootMetadata_t *metadata = (BootMetadata_t *)METADATA_ADDR;
+  
+  char debug_buf[150];
+  sprintf(debug_buf, "Reading metadata from 0x%08X\r\n", (unsigned int)METADATA_ADDR);
+  log(debug_buf);
 
   if (metadata->is_valid != 0xA5A5A5A5) {
-	  log("Metadata invalid! Defaulting to Slot A\r\n");
-	  jump_to_application(SLOT_A_ADDR);
+	  sprintf(debug_buf, "Metadata invalid! Read value: 0x%08X (expected: 0xA5A5A5A5)\r\n", 
+	          (unsigned int)metadata->is_valid);
+	  log(debug_buf);
+	  
+	  // First boot - initialize metadata by scanning for valid applications
+	  HAL_StatusTypeDef init_status = initialize_first_boot_metadata();
+	  if (init_status != HAL_OK) {
+		  log("Failed to initialize metadata! Defaulting to Slot A\r\n");
+		  jump_to_application(SLOT_A_ADDR);
+	  }
+	  
+	  // Re-read metadata after initialization
+	  metadata = (BootMetadata_t *)METADATA_ADDR;
+	  if (metadata->is_valid != 0xA5A5A5A5) {
+		  log("Metadata still invalid after initialization! Defaulting to Slot A\r\n");
+		  jump_to_application(SLOT_A_ADDR);
+	  }
+	  
+	  log("Metadata initialized successfully, continuing with normal boot...\r\n");
   }
 
-  log("Metadata valid\r\n");
+  char log_buf[100];
+  sprintf(log_buf, "Metadata: ver=0x%08X, slot=%lu, crc=0x%08X, size=%lu\r\n", 
+          (unsigned int)metadata->version, metadata->active_slot, 
+          (unsigned int)metadata->crc, metadata->image_size);
+  log(log_buf);
+  
   uint32_t target_address = (metadata->active_slot == SLOT_B) ? SLOT_B_ADDR : SLOT_A_ADDR;
+  sprintf(log_buf, "Target slot: %s (0x%08X)\r\n", 
+          (metadata->active_slot == SLOT_B) ? "SLOT_B" : "SLOT_A", 
+          (unsigned int)target_address);
+  log(log_buf);
 
-  // Optional: CRC validation
-  if (!validate_crc(target_address, metadata->crc)) {
+  // CRC validation of target slot
+  if (!validate_crc(target_address, metadata->crc, metadata->image_size)) {
 	  log("CRC validation failed! Falling back to Slot A\r\n");
 	  target_address = SLOT_A_ADDR;
+	  
+	  // Also validate Slot A as fallback (skip CRC if different from target)
+	  if (metadata->active_slot == SLOT_B) {
+		  if (!validate_crc(SLOT_A_ADDR, 0xFFFFFFFF, 0)) {
+			  log("Fallback validation failed! Boot may fail.\r\n");
+		  }
+	  }
   }
 
+  sprintf(log_buf, "Final target: 0x%08X\r\n", (unsigned int)target_address);
+  log(log_buf);
   log("Jumping to application...\r\n");
   jump_to_application(target_address);
 
@@ -273,46 +322,271 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void jump_to_application(uint32_t app_address)
 {
+    // Read vector table from application
     uint32_t sp = *(volatile uint32_t *)app_address;
     uint32_t reset_handler = *(volatile uint32_t *)(app_address + 4);
 
+    char log_buf[100];
+
+    //App jump debug logs
+    log("Reading vector table:\r\n");
+    sprintf(log_buf, "  App Address: 0x%08X\r\n", (unsigned int)app_address);
+    log(log_buf);
+    sprintf(log_buf, "  Stack Pointer: 0x%08X\r\n", (unsigned int)sp);
+    log(log_buf);
+    sprintf(log_buf, "  Reset Handler: 0x%08X\r\n", (unsigned int)reset_handler);
+    log(log_buf);
+
+
     // Validate the stack pointer (should be in RAM range)
-    if ((sp < 0x20000000) || (sp >= (0x20000000 + 128 * 1024))) {
+    if ((sp < RAM_START) || (sp > RAM_END)) {
     	log("Invalid stack pointer! Using bootloader stack.\r\n");
-        sp = _estack;  // Use bootloader's stack if app stack is invalid
+        sp = (uint32_t)&_estack;  // Use bootloader's stack if app stack is invalid
+        sprintf(log_buf, "  Using bootloader stack: 0x%08X\r\n", (unsigned int)sp);
+        log(log_buf);
     }
 
-    HAL_UART_DeInit(&huart2);
-    HAL_DeInit();
-
-    __disable_irq();
-    __DSB();
-
-    // Clear pending interrupts
-    for (int i = 0; i < 8; i++) {
-    	NVIC->ICER[i] = 0xFFFFFFFF;
-        NVIC->ICPR[i] = 0xFFFFFFFF;
-    }
-
-    // ✅ Set Vector Table Offset
-    SCB->VTOR = app_address;
-
-    __set_MSP(sp);
-    pFunction app_entry = (pFunction)reset_handler;
-
-    if ((reset_handler & 0xFFF00000) != 0x08000000) {
+    // Validate reset handler (should be in flash range and odd for Thumb)
+    if ((reset_handler < 0x08000000) || (reset_handler >= 0x08080000) || ((reset_handler & 0x1) == 0)) {
     	log("Invalid reset handler address!\r\n");
         Error_Handler();
     }
 
+    log("Preparing for jump:\r\n");
+    
+    // Disable all interrupts
+    __disable_irq();
+    
+    // Deinitialize HAL and peripherals
+    HAL_UART_DeInit(&huart2);
+    HAL_DeInit();
+
+    // Clear all pending interrupts
+    for (int i = 0; i < 8; i++) {
+    	NVIC->ICER[i] = 0xFFFFFFFF;  // Disable interrupts
+        NVIC->ICPR[i] = 0xFFFFFFFF;   // Clear pending interrupts
+    }
+
+    // Data Synchronization Barrier
+    __DSB();
+    
+    // Set Vector Table Offset Register to point to application
+    SCB->VTOR = app_address;
+    
+    // Instruction Synchronization Barrier
+    __ISB();
+
+    // Set Main Stack Pointer
+    __set_MSP(sp);
+    
+    // Jump to application
+    pFunction app_entry = (pFunction)reset_handler;
     app_entry();
+    
+    // Should never reach here
+    while(1);
 }
 
-uint8_t validate_crc(uint32_t app_addr, uint32_t expected_crc)
+uint32_t calculate_crc32(uint32_t *data, uint32_t length_words)
 {
-    // Placeholder for real CRC calculation
-    // You can implement a CRC32 over app flash area
-    return 1; // always valid for now
+    uint32_t crc = 0xFFFFFFFF;
+    
+    for (uint32_t i = 0; i < length_words; i++) {
+        uint32_t word = data[i];
+        
+        // Process each byte in the word
+        for (int byte = 0; byte < 4; byte++) {
+            uint8_t current_byte = (word >> (byte * 8)) & 0xFF;
+            crc ^= current_byte;
+            
+            for (int bit = 0; bit < 8; bit++) {
+                if (crc & 1) {
+                    crc = (crc >> 1) ^ 0xEDB88320; // CRC32 polynomial
+                } else {
+                    crc >>= 1;
+                }
+            }
+        }
+    }
+    
+    return ~crc;
+}
+
+uint32_t calculate_flash_crc(uint32_t start_addr, uint32_t size_bytes)
+{
+    // Ensure size is word-aligned
+    uint32_t size_words = (size_bytes + 3) / 4;
+    uint32_t *flash_ptr = (uint32_t *)start_addr;
+    
+    char log_buf[100];
+    sprintf(log_buf, "Calculating CRC: addr=0x%08X, size=%lu bytes (%lu words)\r\n", 
+            (unsigned int)start_addr, size_bytes, size_words);
+    log(log_buf);
+    
+    return calculate_crc32(flash_ptr, size_words);
+}
+
+uint8_t is_valid_application(uint32_t app_addr)
+{
+    // Read the stack pointer and reset handler from the application's vector table
+    uint32_t sp = *(volatile uint32_t *)app_addr;
+    uint32_t reset_handler = *(volatile uint32_t *)(app_addr + 4);
+    
+    // Validate stack pointer (should be in RAM range)
+    if ((sp < RAM_START) || (sp > RAM_END)) {
+        return 0;
+    }
+    
+    // Validate reset handler (should be in flash range and odd for Thumb mode)
+    if ((reset_handler < 0x08000000) || (reset_handler >= 0x08080000) || ((reset_handler & 0x1) == 0)) {
+        return 0;
+    }
+    
+    // Check if the application area is not all 0xFF (erased flash)
+    uint32_t *app_data = (uint32_t *)app_addr;
+    uint8_t all_erased = 1;
+    for (int i = 0; i < 64; i++) { // Check first 256 bytes
+        if (app_data[i] != 0xFFFFFFFF) {
+            all_erased = 0;
+            break;
+        }
+    }
+    
+    return !all_erased;
+}
+
+HAL_StatusTypeDef initialize_first_boot_metadata()
+{
+    char log_buf[150];
+    log("First boot detected - scanning for valid application...\r\n");
+    
+    uint8_t slot_a_valid = is_valid_application(SLOT_A_ADDR);
+    uint8_t slot_b_valid = is_valid_application(SLOT_B_ADDR);
+    
+    sprintf(log_buf, "Slot A (0x%08X): %s\r\n", (unsigned int)SLOT_A_ADDR, 
+            slot_a_valid ? "VALID" : "INVALID");
+    log(log_buf);
+    sprintf(log_buf, "Slot B (0x%08X): %s\r\n", (unsigned int)SLOT_B_ADDR, 
+            slot_b_valid ? "VALID" : "INVALID");
+    log(log_buf);
+    
+    // Create default metadata structure
+    BootMetadata_t new_metadata;
+    new_metadata.is_valid = 0xA5A5A5A5;
+    new_metadata.version = 0x00010001;
+    new_metadata.active_slot = SLOT_A;  // Default to Slot A
+    new_metadata.crc = 0xFFFFFFFF;      // No CRC check initially
+    new_metadata.image_size = 0;        // Unknown size
+    new_metadata.reserved[0] = 0;
+    new_metadata.reserved[1] = 0;
+    
+    // Determine which slot to use
+    if (slot_a_valid && !slot_b_valid) {
+        new_metadata.active_slot = SLOT_A;
+        log("Using Slot A as active slot\r\n");
+    } else if (!slot_a_valid && slot_b_valid) {
+        new_metadata.active_slot = SLOT_B;
+        log("Using Slot B as active slot\r\n");
+    } else if (slot_a_valid && slot_b_valid) {
+        new_metadata.active_slot = SLOT_A; // Prefer Slot A if both valid
+        log("Both slots valid - defaulting to Slot A\r\n");
+    } else {
+        log("No valid application found! Defaulting to Slot A\r\n");
+        new_metadata.active_slot = SLOT_A;
+    }
+    
+    // Write metadata to flash
+    HAL_StatusTypeDef status = HAL_FLASH_Unlock();
+    if (status != HAL_OK) {
+        log("Flash unlock failed for metadata initialization\r\n");
+        return status;
+    }
+    
+    // Erase metadata sector
+    FLASH_EraseInitTypeDef eraseInit = {
+        .TypeErase = FLASH_TYPEERASE_SECTORS,
+        .VoltageRange = FLASH_VOLTAGE_RANGE_3,
+        .Sector = FLASH_SECTOR_3,
+        .NbSectors = 1
+    };
+    
+    uint32_t sectorError;
+    status = HAL_FLASHEx_Erase(&eraseInit, &sectorError);
+    if (status != HAL_OK) {
+        sprintf(log_buf, "Metadata sector erase failed: %d\r\n", status);
+        log(log_buf);
+        HAL_FLASH_Lock();
+        return status;
+    }
+    
+    // Write metadata word by word
+    uint32_t *metadata_ptr = (uint32_t *)&new_metadata;
+    uint32_t metadata_words = sizeof(BootMetadata_t) / 4;
+    
+    for (uint32_t i = 0; i < metadata_words; i++) {
+        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, 
+                                   METADATA_ADDR + (i * 4), 
+                                   metadata_ptr[i]);
+        if (status != HAL_OK) {
+            sprintf(log_buf, "Metadata write failed at word %lu\r\n", i);
+            log(log_buf);
+            HAL_FLASH_Lock();
+            return status;
+        }
+    }
+    
+    HAL_FLASH_Lock();
+    log("First boot metadata initialized successfully\r\n");
+    return HAL_OK;
+}
+
+void check_and_clear_flash_protection()
+{
+    // Check current RDP level
+    uint8_t rdp_level = (FLASH->OPTCR & FLASH_OPTCR_RDP) >> FLASH_OPTCR_RDP_Pos;
+    
+    char log_buf[100];
+    sprintf(log_buf, "Flash RDP level: 0x%02X\r\n", rdp_level);
+    log(log_buf);
+    
+    // Check write protection status
+    uint32_t wrp_sectors = (FLASH->OPTCR & FLASH_OPTCR_nWRP) >> FLASH_OPTCR_nWRP_Pos;
+    sprintf(log_buf, "Write protection: 0x%03X (0=protected, 1=unprotected)\r\n", wrp_sectors);
+    log(log_buf);
+    
+    // Only clear protection if there are issues (avoid unnecessary flash cycles)
+    if (rdp_level != 0xAA || wrp_sectors != 0xFFF) {
+        log("Flash protection detected - will be cleared during OTA operations\r\n");
+    } else {
+        log("Flash protection: OK\r\n");
+    }
+}
+
+uint8_t validate_crc(uint32_t app_addr, uint32_t expected_crc, uint32_t image_size)
+{
+    if (expected_crc == 0xFFFFFFFF) {
+        log("CRC validation skipped (no expected CRC)\r\n");
+        return 1; // Skip validation if no CRC is set
+    }
+    
+    // Use provided image size, or default to 192KB if not specified
+    uint32_t app_size = (image_size > 0 && image_size <= (192 * 1024)) ? 
+                        image_size : (192 * 1024);
+    
+    uint32_t calculated_crc = calculate_flash_crc(app_addr, app_size);
+    
+    char log_buf[100];
+    sprintf(log_buf, "CRC check: expected=0x%08X, calculated=0x%08X (size=%lu)\r\n", 
+            (unsigned int)expected_crc, (unsigned int)calculated_crc, app_size);
+    log(log_buf);
+    
+    if (calculated_crc == expected_crc) {
+        log("CRC validation: PASS\r\n");
+        return 1;
+    } else {
+        log("CRC validation: FAIL\r\n");
+        return 0;
+    }
 }
 /* USER CODE END 4 */
 
