@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "app_tasks.h"
+#include "boot_metadata.h"
+#include "ota.h"
 
 
 #define LOG_QUEUE_LEN    10
@@ -47,7 +49,6 @@ void handle_command(const char *cmd){
 		return;
 	}
 	
-	// Manual comparison to bypass strcmp issue
 	if(strcmp(cmd, "version") == 0){
 		log_printf("Firmware v1.0.2\r\n");
 	}
@@ -77,7 +78,12 @@ void handle_command(const char *cmd){
 			} else {
 				log_printf("OTA started, expecting %lu bytes\r\n", firmware_size);
 				log_printf("Ready to receive firmware binary data...\r\n");
-				osDelay(10); // Give OTA task time to process
+				
+				// Wait for OTA task to complete initialization and set state
+				osDelay(100); // Give OTA task time to erase and set state
+				
+				// Wait for clean state transition
+				osDelay(50); // Allow any pending UART data to arrive and be cleared
 			}
 		} else {
 			log_printf("Usage: otastart <firmware_size_bytes>\r\n");
@@ -106,6 +112,48 @@ void handle_command(const char *cmd){
 			log_printf("OTA finish command sent\r\n");
 		} else {
 			log_printf("Failed to send OTA finish command\r\n");
+		}
+	}
+	else if(strcmp(cmd, "crc") == 0){
+		// Calculate and display CRC of current active slot
+		uint32_t current_slot_addr = (boot_metadata->active_slot == SLOT_A) ? SLOT_A_ADDRESS : SLOT_B_ADDRESS;
+		uint32_t image_size = (boot_metadata->image_size > 0) ? boot_metadata->image_size : (192 * 1024);
+		
+		log_printf("Calculating CRC for active slot (%s)...\r\n", 
+		           (boot_metadata->active_slot == SLOT_A) ? "SLOT_A" : "SLOT_B");
+		
+		uint32_t calculated_crc = calculate_flash_crc_ota(current_slot_addr, image_size);
+		
+		log_printf("Flash CRC32: 0x%08X\r\n", (unsigned int)calculated_crc);
+		log_printf("Expected CRC: 0x%08X\r\n", (unsigned int)boot_metadata->crc);
+		
+		if (boot_metadata->crc != 0xFFFFFFFF) {
+			if (calculated_crc == boot_metadata->crc) {
+				log_printf("CRC verification: PASS\r\n");
+			} else {
+				log_printf("CRC verification: FAIL\r\n");
+			}
+		} else {
+			log_printf("CRC verification: SKIPPED (no expected CRC)\r\n");
+		}
+	}
+	else if(strcmp(cmd, "initmetadata") == 0){
+		log_printf("Initializing metadata...\r\n");
+		HAL_StatusTypeDef status = initialize_metadata();
+		if (status == HAL_OK) {
+			log_printf("Metadata initialized successfully\r\n");
+		} else {
+			log_printf("Metadata initialization failed: %d\r\n", status);
+		}
+	}
+	else if(strcmp(cmd, "clearprotection") == 0){
+		log_printf("Clearing flash protection...\r\n");
+		HAL_StatusTypeDef status = clear_flash_protection();
+		if (status == HAL_OK) {
+			log_printf("Flash protection cleared successfully\r\n");
+			log_printf("Please reset the device for changes to take effect\r\n");
+		} else {
+			log_printf("Flash protection clear failed: %d\r\n", status);
 		}
 	}
 	else if(strcmp(cmd, "data") == 0){
