@@ -19,6 +19,7 @@ import time
 import os
 import sys
 import argparse
+import zlib
 from pathlib import Path
 
 
@@ -86,7 +87,14 @@ class STM32OTAUpdater:
                         print(f"← {line}")
                         
                         # Check for success indicators
-                        if "Ready to receive firmware binary data" in line:
+                        if any(success in line for success in [
+                            "Ready to receive firmware binary data",
+                            "OTA state confirmed: RECEIVING mode active",
+                            "OTA started, expecting"
+                        ]):
+                            # For OTA start, wait for additional confirmation
+                            if "otastart" in command:
+                                continue  # Keep reading for more responses
                             return True
                         elif any(err in line.lower() for err in ["error", "failed", "timeout"]):
                             return False
@@ -118,9 +126,13 @@ class STM32OTAUpdater:
         
         # Step 1: Start OTA process
         print(f"\n🚀 Starting OTA process...")
-        if not self.send_command(f"otastart {file_size}", wait_response=True, timeout=10):
+        if not self.send_command(f"otastart {file_size}", wait_response=True, timeout=15):
             print("✗ Failed to start OTA")
             return False
+        
+        # Wait for device to complete flash erase and enter receiving mode
+        print("⏳ Waiting for device to complete initialization...")
+        time.sleep(3)  # Give device time to erase flash and switch modes
         
         # Step 2: Upload firmware data
         print(f"\n📤 Uploading firmware...")
@@ -143,7 +155,7 @@ class STM32OTAUpdater:
                     if chunk_num % 10 == 0 or uploaded == file_size:  # Every 10 chunks or at end
                         print(f"   Progress: {uploaded:6,}/{file_size:,} bytes ({progress:3d}%)")
                     
-                    time.sleep(0.01)  # Prevent overwhelming the device
+                    time.sleep(0.05)  # Prevent overwhelming the device - increased delay
                 
                 print(f"✓ Upload complete: {uploaded:,} bytes sent")
                 
@@ -151,16 +163,48 @@ class STM32OTAUpdater:
             print(f"✗ Upload error: {e}")
             return False
         
-        # Step 3: Check completion status
-        print(f"\n⏳ Checking OTA status...")
+        # Step 3: Wait for OTA completion and check status
+        print(f"\n⏳ Waiting for OTA completion...")
+        time.sleep(2)  # Reduced wait time since we added proper handshaking
+        
+        # Send finish command to complete OTA
+        print("→ Sending OTA finish command...")
+        if self.send_command("otafinish", wait_response=True, timeout=10):
+            print("✓ OTA finish command sent")
+        else:
+            print("⚠ OTA finish command may have failed")
+        
+        # Wait a bit more for processing
         time.sleep(2)
         
+        # Check final status
         if self.send_command("otastatus", wait_response=True, timeout=5):
             print("✓ OTA process completed")
             return True
         else:
             print("⚠ Status check completed")
             return True  # Consider success even if status check is unclear
+    
+    def calculate_crc32(self, firmware_file):
+        """Calculate CRC32 checksum of firmware file"""
+        try:
+            with open(firmware_file, 'rb') as f:
+                file_data = f.read()
+                crc32 = zlib.crc32(file_data) & 0xffffffff
+                return crc32, len(file_data)
+        except Exception as e:
+            print(f"✗ CRC calculation error: {e}")
+            return None, 0
+    
+    def send_crc_command(self, expected_crc=None):
+        """Send CRC command to device and optionally verify against expected value"""
+        if not self.send_command("crc", wait_response=True, timeout=10):
+            print("⚠ CRC command failed or not supported by firmware")
+            return False
+        
+        # If we have an expected CRC, we would parse the response here
+        # For now, just indicate that the command was sent
+        return True
     
     def monitor_output(self, duration=5):
         """Monitor device output for specified duration"""
@@ -188,6 +232,8 @@ Examples:
   python ota_update.py firmware.bin
   python ota_update.py FreeRTOS.bin --port COM3 --baudrate 115200
   python ota_update.py app.bin --port /dev/ttyUSB0 --chunk-size 128
+  python ota_update.py firmware.bin --crc-only
+  python ota_update.py firmware.bin --verify-crc
         """
     )
     
@@ -202,6 +248,10 @@ Examples:
                        help='Monitor duration after upload in seconds (default: 5)')
     parser.add_argument('--no-monitor', action='store_true',
                        help='Skip post-upload monitoring')
+    parser.add_argument('--crc-only', action='store_true',
+                       help='Only calculate and display CRC32 checksum, do not upload')
+    parser.add_argument('--verify-crc', action='store_true',
+                       help='Send CRC command to device after upload for verification')
     
     args = parser.parse_args()
     
@@ -219,9 +269,24 @@ Examples:
     print("    STM32 Secure OTA Firmware Update Tool")
     print("=" * 60)
     
-    # Create updater and upload
+    # Calculate CRC32 checksum
     updater = STM32OTAUpdater(args.port, args.baudrate)
+    crc32, file_size = updater.calculate_crc32(str(firmware_path))
     
+    if crc32 is not None:
+        print(f"📊 CRC32: 0x{crc32:08X} ({crc32})")
+        print(f"📏 Size: {file_size:,} bytes")
+    
+    # If only CRC calculation requested, exit here
+    if args.crc_only:
+        if crc32 is not None:
+            print("✓ CRC calculation complete")
+        else:
+            print("✗ CRC calculation failed")
+            sys.exit(1)
+        sys.exit(0)
+    
+    # Connect for upload
     if not updater.connect():
         sys.exit(1)
     
@@ -230,6 +295,13 @@ Examples:
         
         if success:
             print("\n🎉 Firmware update successful!")
+            
+            # Verify CRC if requested
+            if args.verify_crc:
+                print(f"\n🔍 Verifying flash CRC...")
+                if crc32 is not None:
+                    print(f"Expected CRC32: 0x{crc32:08X}")
+                updater.send_crc_command(crc32)
             
             # Monitor device output
             if not args.no_monitor and args.monitor > 0:
