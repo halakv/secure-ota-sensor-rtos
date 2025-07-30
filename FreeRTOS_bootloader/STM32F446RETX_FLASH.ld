@@ -36,7 +36,7 @@
 ENTRY(Reset_Handler)
 
 /* Highest address of the user mode stack */
-_estack = ORIGIN(RAM) + LENGTH(RAM) - 4; /* end of "RAM" Ram type memory */
+_estack = ORIGIN(RAM) + LENGTH(RAM) - 0x100; /* Reserve 256 bytes for app */
 
 _Min_Heap_Size = 0x200; /* required amount of heap */
 _Min_Stack_Size = 0x400; /* required amount of stack */
@@ -44,12 +44,12 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 /* Memories definition */
 MEMORY
 {
-  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
+  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 126K /* Reserve 2K for app stack */
   FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 32K
 }
 
 /*define symbol for metadata*/
-__boot_metadata_start__ = 0x08007800;
+__boot_metadata_start__ = 0x0800C000;
 
 /* Sections */
 SECTIONS
@@ -88,7 +88,7 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 	
-  .metadata 0x08007800:
+  .metadata 0x0800C000:
   {
   	KEEP(*(.boot_metadata))
   } >FLASH

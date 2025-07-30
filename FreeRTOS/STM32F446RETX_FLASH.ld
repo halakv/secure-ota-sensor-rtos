@@ -36,15 +36,15 @@
 ENTRY(Reset_Handler)
 
 /* Highest address of the user mode stack */
-_estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
+_estack = ORIGIN(RAM) + LENGTH(RAM) - 4; /* end of "RAM" Ram type memory */
 
 _Min_Heap_Size = 0x200; /* required amount of heap */
-_Min_Stack_Size = 0x400; /* required amount of stack */
+_Min_Stack_Size = 0x100; /* reduced stack size to accommodate bootloader */
 
 /* Memories definition */
 MEMORY
 {
-  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
+  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 126K /* Leave 2K for bootloader */
   FLASH    (rx)    : ORIGIN = 0x8010000,   LENGTH = 192K
   SLOTB (rx)     : ORIGIN = 0x08040000, LENGTH = 256K   /* Slot B (reserved) */
 }
@@ -93,7 +93,7 @@ SECTIONS
     . = ORIGIN(SLOTB) + LENGTH(SLOTB);
   } > SLOTB
   
-  .metadata 0x08007800:
+  .metadata 0x0800C000:
   {
   	KEEP(*(.boot_metadata))
   } >FLASH
