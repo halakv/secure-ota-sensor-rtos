@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include "main.h"
 
-#define METADATA_ADDRESS  0x08007800
+#define METADATA_ADDRESS  0x0800C000
 #define VALID_MARKER	  0xA5A5A5A5
 
 #define SLOT_A_ADDRESS  0x08010000
@@ -28,8 +28,10 @@ typedef enum {
 typedef struct {
     uint32_t is_valid;       // 0xA5A5A5A5 if valid
     uint32_t version;
-    Slot_t active_slot;
-    uint32_t crc;            // Expected CRC of active image
+    uint32_t active_slot;    // SLOT_A (0) or SLOT_B (1) - changed from Slot_t to uint32_t
+    uint32_t crc;            // Expected CRC32 of active image
+    uint32_t image_size;     // Size of active image in bytes
+    uint32_t reserved[2];    // Reserved for future use
 } BootMetadata_t;
 
 extern BootMetadata_t *boot_metadata;
