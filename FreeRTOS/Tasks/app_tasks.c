@@ -81,6 +81,13 @@ void CLITaskFunc(void *argument) {
 			
 			// Check if we're in OTA data receiving mode
 			if (ota_state == OTA_STATE_RECEIVING) {
+				// Skip any ASCII characters or control characters that might be leftover from commands
+				// OTA binary data should not contain these characters in the first bytes
+				if (ota_received_size == 0 && ota_buffer_index == 0 && 
+				    (bytes >= 0x07 && bytes <= 0x7E)) {  // Extended range to catch control chars
+					continue; // Skip this byte silently
+				}
+				
 				// Collect binary data for OTA
 				ota_buffer[ota_buffer_index++] = bytes;
 				
@@ -96,6 +103,7 @@ void CLITaskFunc(void *argument) {
 					for (uint32_t j = 0; j < ota_buffer_index; j++) {
 						otaMsg.data[j] = ota_buffer[j];
 					}
+					
 					
 					if (osMessageQueuePut(otaQueue, &otaMsg, 0, 100) == osOK) {
 						ota_received_size += ota_buffer_index;
@@ -223,7 +231,22 @@ void OTATaskFunc(void *argument) {
         case OTA_CMD_FINISH:
           if (ota_state == OTA_STATE_RECEIVING || ota_state == OTA_STATE_COMPLETE) {
             log_printf("[OTA] Firmware update completed. Total bytes: %lu\r\n", totalBytesReceived);
-            log_printf("[OTA] Firmware written to Slot B successfully\r\n");
+            
+            // Complete OTA process and switch boot slot
+            HAL_StatusTypeDef switch_status = ota_complete_and_switch(totalBytesReceived);
+            if (switch_status == HAL_OK) {
+              log_printf("[OTA] Boot slot switched successfully\r\n");
+              log_printf("[OTA] System will boot from new firmware after reset\r\n");
+              
+              // Optional: Trigger system reset to boot new firmware
+              log_printf("[OTA] Triggering system reset in 3 seconds...\r\n");
+              osDelay(3000);
+              NVIC_SystemReset();
+            } else {
+              log_printf("[OTA] Failed to switch boot slot: %d\r\n", switch_status);
+              log_printf("[OTA] OTA completed but system will boot from old firmware\r\n");
+            }
+            
             ota_state = OTA_STATE_IDLE;
           } else {
             log_printf("[OTA] Finish command received but OTA was not in progress\r\n");
